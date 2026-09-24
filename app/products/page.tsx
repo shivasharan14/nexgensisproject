@@ -1,12 +1,22 @@
+
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  addProduct,
+  deleteProduct,
   getCategories,
   getProducts,
   getProductsByCategory,
   searchProducts,
+  updateProduct,
   Product,
 } from "../../api/productApi";
 
@@ -21,24 +31,55 @@ function ProductsPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Product form states
+  const [showForm, setShowForm] = useState(false);
+  const [editingProduct, setEditingProduct] =
+    useState<Product | null>(null);
+
+  const [formLoading, setFormLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] =
+    useState<number | null>(null);
+
+  const [formError, setFormError] = useState("");
+
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    category: "",
+    price: "",
+    stock: "",
+  });
+
+  // URL parameters
   const pageParam = Number(searchParams.get("page"));
   const sizeParam = Number(searchParams.get("size"));
 
   const page =
-    Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1;
+    Number.isInteger(pageParam) && pageParam > 0
+      ? pageParam
+      : 1;
 
   const pageSize =
-    [10, 20, 50].includes(sizeParam) ? sizeParam : 10;
+    [10, 20, 50].includes(sizeParam)
+      ? sizeParam
+      : 10;
 
   const search = searchParams.get("search") || "";
   const category = searchParams.get("category") || "";
   const sort = searchParams.get("sort") || "";
 
-  const [searchInput, setSearchInput] = useState(search);
+  const [searchInput, setSearchInput] =
+    useState(search);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(total / pageSize)
+  );
 
+  // --------------------------------------------------
   // Authentication
+  // --------------------------------------------------
+
   useEffect(() => {
     const token = localStorage.getItem("token");
 
@@ -47,13 +88,16 @@ function ProductsPageContent() {
     }
   }, [router]);
 
-  // Load categories
+  // --------------------------------------------------
+  // Load Categories
+  // --------------------------------------------------
+
   useEffect(() => {
     const loadCategories = async () => {
       try {
         const data = await getCategories();
         setCategories(data);
-      } catch (error) {
+      } catch {
         console.error("Category loading failed");
       }
     };
@@ -61,12 +105,18 @@ function ProductsPageContent() {
     loadCategories();
   }, []);
 
-  // Keep search input synced with URL
+  // --------------------------------------------------
+  // Sync search input with URL
+  // --------------------------------------------------
+
   useEffect(() => {
     setSearchInput(search);
   }, [search]);
 
-  // Debounce search
+  // --------------------------------------------------
+  // Debounced Search
+  // --------------------------------------------------
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchInput !== search) {
@@ -78,9 +128,12 @@ function ProductsPageContent() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchInput, search]);
 
-  // Load products
+  // --------------------------------------------------
+  // Load Products
+  // --------------------------------------------------
+
   useEffect(() => {
     const controller = new AbortController();
 
@@ -110,12 +163,20 @@ function ProductsPageContent() {
             skip
           );
         } else {
-          data = await getProducts(pageSize, skip);
+          data = await getProducts(
+            pageSize,
+            skip
+          );
         }
 
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
 
-        // Handle invalid page numbers such as ?page=999
+        // --------------------------------------------------
+        // Handle page=999 or any page beyond available pages
+        // --------------------------------------------------
+
         const maxPage = Math.max(
           1,
           Math.ceil(data.total / pageSize)
@@ -127,21 +188,38 @@ function ProductsPageContent() {
           params.set("page", "1");
           params.set("size", String(pageSize));
 
-          if (search) params.set("search", search);
-          if (category) params.set("category", category);
-          if (sort) params.set("sort", sort);
+          if (search) {
+            params.set("search", search);
+          }
 
-          router.replace(`/products?${params.toString()}`);
+          if (category) {
+            params.set("category", category);
+          }
+
+          if (sort) {
+            params.set("sort", sort);
+          }
+
+          router.replace(
+            `/products?${params.toString()}`
+          );
 
           return;
         }
 
         setProducts(data.products);
         setTotal(data.total);
-      } catch (error: any) {
-        if (error.name === "CanceledError") return;
+      } catch (error: unknown) {
+        if (
+          error instanceof Error &&
+          error.name === "CanceledError"
+        ) {
+          return;
+        }
 
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          return;
+        }
 
         setError("Failed to load products.");
       } finally {
@@ -156,36 +234,52 @@ function ProductsPageContent() {
     return () => {
       controller.abort();
     };
-  }, [page, pageSize, search, category, router, sort]);
+  }, [
+    page,
+    pageSize,
+    search,
+    category,
+    router,
+    sort,
+  ]);
 
-  // Sort on client
-  const sortedProducts = [...products].sort((a, b) => {
-    if (sort === "price-asc") {
-      return a.price - b.price;
+  // --------------------------------------------------
+  // Sort Products
+  // --------------------------------------------------
+
+  const sortedProducts = [...products].sort(
+    (a, b) => {
+      if (sort === "price-asc") {
+        return a.price - b.price;
+      }
+
+      if (sort === "price-desc") {
+        return b.price - a.price;
+      }
+
+      if (sort === "rating-desc") {
+        return b.rating - a.rating;
+      }
+
+      if (sort === "rating-asc") {
+        return a.rating - b.rating;
+      }
+
+      if (sort === "title-asc") {
+        return a.title.localeCompare(b.title);
+      }
+
+      if (sort === "title-desc") {
+        return b.title.localeCompare(a.title);
+      }
+
+      return 0;
     }
+  );
 
-    if (sort === "price-desc") {
-      return b.price - a.price;
-    }
-
-    if (sort === "rating-desc") {
-      return b.rating - a.rating;
-    }
-
-    if (sort === "rating-asc") {
-      return a.rating - b.rating;
-    }
-
-    if (sort === "title-asc") {
-      return a.title.localeCompare(b.title);
-    }
-
-    if (sort === "title-desc") {
-      return b.title.localeCompare(a.title);
-    }
-
-    return 0;
-  });
+  // --------------------------------------------------
+  // URL Update
+  // --------------------------------------------------
 
   const updateUrl = ({
     page: newPage = page,
@@ -215,10 +309,19 @@ function ProductsPageContent() {
       params.set("sort", newSort);
     }
 
-    router.push(`/products?${params.toString()}`);
+    router.push(
+      `/products?${params.toString()}`
+    );
   };
 
+  // --------------------------------------------------
+  // Pagination
+  // --------------------------------------------------
+
   const changePage = (newPage: number) => {
+    if (newPage < 1) return;
+    if (newPage > totalPages) return;
+
     updateUrl({
       page: newPage,
     });
@@ -230,35 +333,338 @@ function ProductsPageContent() {
     params.set("page", "1");
     params.set("size", String(newSize));
 
-    if (search) params.set("search", search);
-    if (category) params.set("category", category);
-    if (sort) params.set("sort", sort);
+    if (search) {
+      params.set("search", search);
+    }
 
-    router.push(`/products?${params.toString()}`);
+    if (category) {
+      params.set("category", category);
+    }
+
+    if (sort) {
+      params.set("sort", sort);
+    }
+
+    router.push(
+      `/products?${params.toString()}`
+    );
   };
 
-  const handleCategoryChange = (value: string) => {
+  // --------------------------------------------------
+  // Category
+  // --------------------------------------------------
+
+  const handleCategoryChange = (
+    value: string
+  ) => {
     updateUrl({
       category: value,
       page: 1,
     });
   };
 
-  const handleSortChange = (value: string) => {
+  // --------------------------------------------------
+  // Sort
+  // --------------------------------------------------
+
+  const handleSortChange = (
+    value: string
+  ) => {
     updateUrl({
       sort: value,
       page: 1,
     });
   };
 
-  const start =
-    total === 0 ? 0 : (page - 1) * pageSize + 1;
+  // --------------------------------------------------
+  // Add Product Form
+  // --------------------------------------------------
 
-  const end = Math.min(page * pageSize, total);
+  const openAddForm = () => {
+    setEditingProduct(null);
+
+    setForm({
+      title: "",
+      description: "",
+      category: "",
+      price: "",
+      stock: "",
+    });
+
+    setFormError("");
+    setShowForm(true);
+  };
+
+  // --------------------------------------------------
+  // Edit Product Form
+  // --------------------------------------------------
+
+  const openEditForm = (
+    product: Product
+  ) => {
+    setEditingProduct(product);
+
+    setForm({
+      title: product.title,
+      description: product.description,
+      category: product.category,
+      price: String(product.price),
+      stock: String(product.stock),
+    });
+
+    setFormError("");
+    setShowForm(true);
+  };
+
+  // --------------------------------------------------
+  // Close Form
+  // --------------------------------------------------
+
+  const closeForm = () => {
+    if (formLoading) return;
+
+    setShowForm(false);
+    setEditingProduct(null);
+    setFormError("");
+  };
+
+  // --------------------------------------------------
+  // Form Input Change
+  // --------------------------------------------------
+
+  const handleFormChange = (
+    e: ChangeEvent<
+      HTMLInputElement |
+      HTMLTextAreaElement |
+      HTMLSelectElement
+    >
+  ) => {
+    const { name, value } = e.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
+
+  // --------------------------------------------------
+  // Save Product
+  // --------------------------------------------------
+
+  const handleSaveProduct = async (
+    e: FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+
+    // Prevent multiple rapid clicks
+    if (formLoading) return;
+
+    const title = form.title.trim();
+    const description =
+      form.description.trim();
+    const categoryValue =
+      form.category.trim();
+
+    const price = Number(form.price);
+    const stock = Number(form.stock);
+
+    // Validation
+    if (!title) {
+      setFormError(
+        "Product title is required."
+      );
+      return;
+    }
+
+    if (!description) {
+      setFormError(
+        "Description is required."
+      );
+      return;
+    }
+
+    if (!categoryValue) {
+      setFormError(
+        "Category is required."
+      );
+      return;
+    }
+
+    if (
+      !form.price ||
+      Number.isNaN(price) ||
+      price <= 0
+    ) {
+      setFormError(
+        "Price must be greater than 0."
+      );
+      return;
+    }
+
+    if (
+      !form.stock ||
+      Number.isNaN(stock) ||
+      stock < 0
+    ) {
+      setFormError(
+        "Stock cannot be negative."
+      );
+      return;
+    }
+
+    setFormLoading(true);
+    setFormError("");
+
+    const productData = {
+      title,
+      description,
+      category: categoryValue,
+      price,
+      stock,
+    };
+
+    try {
+      // --------------------------------------------------
+      // Edit
+      // --------------------------------------------------
+
+      if (editingProduct) {
+        const updatedProduct =
+          await updateProduct(
+            editingProduct.id,
+            productData
+          );
+
+        setProducts((previous) =>
+          previous.map((product) =>
+            product.id ===
+            editingProduct.id
+              ? {
+                  ...product,
+                  ...updatedProduct,
+                  title,
+                  description,
+                  category:
+                    categoryValue,
+                  price,
+                  stock,
+                }
+              : product
+          )
+        );
+      }
+
+      // --------------------------------------------------
+      // Add
+      // --------------------------------------------------
+
+      else {
+        const newProduct =
+          await addProduct(productData);
+
+        const productToAdd: Product = {
+          ...newProduct,
+          title,
+          description,
+          category: categoryValue,
+          price,
+          stock,
+
+          thumbnail:
+            newProduct.thumbnail ||
+            "https://cdn.dummyjson.com/product-images/1/thumbnail.jpg",
+
+          images:
+            newProduct.images || [],
+        };
+
+        setProducts((previous) => [
+          productToAdd,
+          ...previous,
+        ]);
+
+        setTotal(
+          (previous) => previous + 1
+        );
+      }
+
+      setShowForm(false);
+      setEditingProduct(null);
+      setFormError("");
+    } catch {
+      setFormError(
+        editingProduct
+          ? "Failed to update product."
+          : "Failed to add product."
+      );
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  // --------------------------------------------------
+  // Delete Product
+  // --------------------------------------------------
+
+  const handleDeleteProduct = async (
+    id: number
+  ) => {
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to delete this product?"
+      );
+
+    if (!confirmed) return;
+
+    // Prevent multiple delete requests
+    if (deleteLoading !== null) return;
+
+    setDeleteLoading(id);
+
+    try {
+      await deleteProduct(id);
+
+      setProducts((previous) =>
+        previous.filter(
+          (product) =>
+            product.id !== id
+        )
+      );
+
+      setTotal(
+        (previous) =>
+          Math.max(0, previous - 1)
+      );
+    } catch {
+      alert(
+        "Failed to delete product."
+      );
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  // --------------------------------------------------
+  // Pagination Display
+  // --------------------------------------------------
+
+  const start =
+    total === 0
+      ? 0
+      : (page - 1) * pageSize + 1;
+
+  const end = Math.min(
+    page * pageSize,
+    total
+  );
+
+  // --------------------------------------------------
+  // Loading
+  // --------------------------------------------------
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-gray-100">
         <p className="text-lg text-gray-600">
           Loading products...
         </p>
@@ -266,16 +672,22 @@ function ProductsPageContent() {
     );
   }
 
+  // --------------------------------------------------
+  // Error
+  // --------------------------------------------------
+
   if (error) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
+      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+        <div className="rounded-xl bg-white p-10 text-center shadow">
           <p className="mb-4 text-red-600">
             {error}
           </p>
 
           <button
-            onClick={() => window.location.reload()}
+            onClick={() =>
+              window.location.reload()
+            }
             className="rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-700"
           >
             Retry
@@ -284,6 +696,10 @@ function ProductsPageContent() {
       </main>
     );
   }
+
+  // --------------------------------------------------
+  // Main UI
+  // --------------------------------------------------
 
   return (
     <main className="min-h-screen bg-gray-100 p-4 md:p-8">
@@ -301,16 +717,30 @@ function ProductsPageContent() {
             </p>
           </div>
 
-          <button
-            onClick={() => {
-              localStorage.removeItem("token");
-              localStorage.removeItem("user");
-              router.push("/login");
-            }}
-            className="rounded-lg bg-red-600 px-5 py-2.5 font-medium text-white hover:bg-red-700"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={openAddForm}
+              className="rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"
+            >
+              + Add Product
+            </button>
+
+            <button
+              onClick={() => {
+                localStorage.removeItem(
+                  "token"
+                );
+                localStorage.removeItem(
+                  "user"
+                );
+
+                router.push("/login");
+              }}
+              className="rounded-lg bg-red-600 px-5 py-2.5 font-medium text-white hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* Search / Filter / Sort */}
@@ -326,7 +756,9 @@ function ProductsPageContent() {
               type="text"
               value={searchInput}
               onChange={(e) =>
-                setSearchInput(e.target.value)
+                setSearchInput(
+                  e.target.value
+                )
               }
               placeholder="Search by product name..."
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500"
@@ -342,7 +774,9 @@ function ProductsPageContent() {
             <select
               value={category}
               onChange={(e) =>
-                handleCategoryChange(e.target.value)
+                handleCategoryChange(
+                  e.target.value
+                )
               }
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5"
             >
@@ -350,11 +784,16 @@ function ProductsPageContent() {
                 All Categories
               </option>
 
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
+              {categories.map(
+                (item) => (
+                  <option
+                    key={item}
+                    value={item}
+                  >
+                    {item}
+                  </option>
+                )
+              )}
             </select>
           </div>
 
@@ -367,11 +806,15 @@ function ProductsPageContent() {
             <select
               value={sort}
               onChange={(e) =>
-                handleSortChange(e.target.value)
+                handleSortChange(
+                  e.target.value
+                )
               }
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5"
             >
-              <option value="">Default</option>
+              <option value="">
+                Default
+              </option>
 
               <option value="price-asc">
                 Price: Low to High
@@ -407,7 +850,8 @@ function ProductsPageContent() {
             <strong>
               {start}–{end}
             </strong>{" "}
-            of <strong>{total}</strong>
+            of{" "}
+            <strong>{total}</strong>
           </p>
 
           <select
@@ -419,9 +863,17 @@ function ProductsPageContent() {
             }
             className="rounded-lg border border-gray-300 px-3 py-2"
           >
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
+            <option value={10}>
+              10
+            </option>
+
+            <option value={20}>
+              20
+            </option>
+
+            <option value={50}>
+              50
+            </option>
           </select>
         </div>
 
@@ -462,99 +914,211 @@ function ProductsPageContent() {
                     <th className="px-6 py-4 text-left text-sm font-semibold">
                       Stock
                     </th>
+
+                    <th className="px-6 py-4 text-left text-sm font-semibold">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y">
-                  {sortedProducts.map((product) => (
-                    <tr
-                      key={product.id}
-                      className="hover:bg-gray-50"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-4">
-                          <img
-                            src={product.thumbnail}
-                            alt={product.title}
-                            className="h-14 w-14 rounded-lg object-cover"
-                          />
+                  {sortedProducts.map(
+                    (product) => (
+                      <tr
+                        key={product.id}
+                        className="hover:bg-gray-50"
+                      >
+                        {/* Product */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-4">
+                            <img
+                              src={
+                                product.thumbnail
+                              }
+                              alt={
+                                product.title
+                              }
+                              className="h-14 w-14 rounded-lg object-cover"
+                            />
 
-                          <button
-                            onClick={() =>
-                              router.push(
-                                `/products/${product.id}`
-                              )
-                            }
-                            className="text-left font-medium hover:text-blue-600"
-                          >
-                            {product.title}
-                          </button>
-                        </div>
-                      </td>
+                            <button
+                              onClick={() =>
+                                router.push(
+                                  `/products/${product.id}`
+                                )
+                              }
+                              className="text-left font-medium hover:text-blue-600"
+                            >
+                              {
+                                product.title
+                              }
+                            </button>
+                          </div>
+                        </td>
 
-                      <td className="px-6 py-4 text-gray-600">
-                        {product.category}
-                      </td>
+                        {/* Category */}
+                        <td className="px-6 py-4 text-gray-600">
+                          {
+                            product.category
+                          }
+                        </td>
 
-                      <td className="px-6 py-4 font-medium">
-                        ${product.price}
-                      </td>
+                        {/* Price */}
+                        <td className="px-6 py-4 font-medium">
+                          $
+                          {
+                            product.price
+                          }
+                        </td>
 
-                      <td className="px-6 py-4">
-                        ⭐ {product.rating}
-                      </td>
+                        {/* Rating */}
+                        <td className="px-6 py-4">
+                          ⭐{" "}
+                          {
+                            product.rating
+                          }
+                        </td>
 
-                      <td className="px-6 py-4">
-                        {product.stock}
-                      </td>
-                    </tr>
-                  ))}
+                        {/* Stock */}
+                        <td className="px-6 py-4">
+                          {
+                            product.stock
+                          }
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() =>
+                                openEditForm(
+                                  product
+                                )
+                              }
+                              className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              onClick={() =>
+                                handleDeleteProduct(
+                                  product.id
+                                )
+                              }
+                              disabled={
+                                deleteLoading ===
+                                product.id
+                              }
+                              className="rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              {deleteLoading ===
+                              product.id
+                                ? "Deleting..."
+                                : "Delete"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile Cards */}
             <div className="grid gap-4 md:hidden">
-              {sortedProducts.map((product) => (
-                <div
-                  key={product.id}
-                  className="rounded-xl bg-white p-4 shadow-sm"
-                >
-                  <div className="flex gap-4">
-                    <img
-                      src={product.thumbnail}
-                      alt={product.title}
-                      className="h-20 w-20 rounded-lg object-cover"
-                    />
+              {sortedProducts.map(
+                (product) => (
+                  <div
+                    key={product.id}
+                    className="rounded-xl bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex gap-4">
+                      <img
+                        src={
+                          product.thumbnail
+                        }
+                        alt={
+                          product.title
+                        }
+                        className="h-20 w-20 rounded-lg object-cover"
+                      />
 
-                    <div>
+                      <div className="min-w-0 flex-1">
+                        <button
+                          onClick={() =>
+                            router.push(
+                              `/products/${product.id}`
+                            )
+                          }
+                          className="text-left font-medium hover:text-blue-600"
+                        >
+                          {
+                            product.title
+                          }
+                        </button>
+
+                        <p className="text-sm text-gray-500">
+                          {
+                            product.category
+                          }
+                        </p>
+
+                        <p className="mt-1 font-medium">
+                          $
+                          {
+                            product.price
+                          }
+                        </p>
+
+                        <p className="text-sm">
+                          ⭐{" "}
+                          {
+                            product.rating
+                          }{" "}
+                          · Stock:{" "}
+                          {
+                            product.stock
+                          }
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Mobile Actions */}
+                    <div className="mt-4 flex gap-2 border-t pt-3">
                       <button
                         onClick={() =>
-                          router.push(
-                            `/products/${product.id}`
+                          openEditForm(
+                            product
                           )
                         }
-                        className="text-left font-medium hover:text-blue-600"
+                        className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
                       >
-                        {product.title}
+                        Edit
                       </button>
 
-                      <p className="text-sm text-gray-500">
-                        {product.category}
-                      </p>
-
-                      <p className="mt-1 font-medium">
-                        ${product.price}
-                      </p>
-
-                      <p className="text-sm">
-                        ⭐ {product.rating} · Stock:{" "}
-                        {product.stock}
-                      </p>
+                      <button
+                        onClick={() =>
+                          handleDeleteProduct(
+                            product.id
+                          )
+                        }
+                        disabled={
+                          deleteLoading ===
+                          product.id
+                        }
+                        className="rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        {deleteLoading ===
+                        product.id
+                          ? "Deleting..."
+                          : "Delete"}
+                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           </>
         )}
@@ -562,7 +1126,6 @@ function ProductsPageContent() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-
             <button
               disabled={page === 1}
               onClick={() =>
@@ -574,15 +1137,20 @@ function ProductsPageContent() {
             </button>
 
             {Array.from(
-              { length: totalPages },
+              {
+                length: totalPages,
+              },
               (_, index) => {
-                const pageNumber = index + 1;
+                const pageNumber =
+                  index + 1;
 
                 return (
                   <button
                     key={pageNumber}
                     onClick={() =>
-                      changePage(pageNumber)
+                      changePage(
+                        pageNumber
+                      )
                     }
                     className={`rounded-lg px-4 py-2 ${
                       pageNumber === page
@@ -597,7 +1165,9 @@ function ProductsPageContent() {
             )}
 
             <button
-              disabled={page === totalPages}
+              disabled={
+                page === totalPages
+              }
               onClick={() =>
                 changePage(page + 1)
               }
@@ -605,19 +1175,217 @@ function ProductsPageContent() {
             >
               Next
             </button>
-
           </div>
         )}
       </div>
+
+      {/* --------------------------------------------------
+          Add / Edit Product Modal
+          -------------------------------------------------- */}
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+
+            {/* Modal Header */}
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {editingProduct
+                    ? "Edit Product"
+                    : "Add Product"}
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {editingProduct
+                    ? "Update product information"
+                    : "Add a new product"}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeForm}
+                disabled={formLoading}
+                className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form */}
+            <form
+              onSubmit={
+                handleSaveProduct
+              }
+              className="space-y-5"
+            >
+              {/* Title */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Title
+                </label>
+
+                <input
+                  name="title"
+                  value={form.title}
+                  onChange={
+                    handleFormChange
+                  }
+                  placeholder="Enter product title"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Description
+                </label>
+
+                <textarea
+                  name="description"
+                  value={
+                    form.description
+                  }
+                  onChange={
+                    handleFormChange
+                  }
+                  placeholder="Enter product description"
+                  rows={4}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Category / Price / Stock */}
+              <div className="grid gap-4 md:grid-cols-3">
+
+                {/* Category */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Category
+                  </label>
+
+                  <select
+                    name="category"
+                    value={
+                      form.category
+                    }
+                    onChange={
+                      handleFormChange
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3"
+                  >
+                    <option value="">
+                      Select category
+                    </option>
+
+                    {categories.map(
+                      (item) => (
+                        <option
+                          key={item}
+                          value={item}
+                        >
+                          {item}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                {/* Price */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Price
+                  </label>
+
+                  <input
+                    name="price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.price}
+                    onChange={
+                      handleFormChange
+                    }
+                    placeholder="0"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Stock */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Stock
+                  </label>
+
+                  <input
+                    name="stock"
+                    type="number"
+                    min="0"
+                    value={form.stock}
+                    onChange={
+                      handleFormChange
+                    }
+                    placeholder="0"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Form Error */}
+              {formError && (
+                <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+                  {formError}
+                </div>
+              )}
+
+              {/* Form Buttons */}
+              <div className="flex justify-end gap-3 border-t pt-5">
+                <button
+                  type="button"
+                  onClick={
+                    closeForm
+                  }
+                  disabled={
+                    formLoading
+                  }
+                  className="rounded-lg border border-gray-300 px-5 py-2.5 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    formLoading
+                  }
+                  className="rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {formLoading
+                    ? "Saving..."
+                    : editingProduct
+                    ? "Update Product"
+                    : "Add Product"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
+
+// --------------------------------------------------
+// Suspense boundary required for useSearchParams()
+// --------------------------------------------------
 
 export default function ProductsPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center">
+        <main className="flex min-h-screen items-center justify-center bg-gray-100">
           <p className="text-lg text-gray-600">
             Loading products...
           </p>
@@ -628,3 +1396,4 @@ export default function ProductsPage() {
     </Suspense>
   );
 }
+

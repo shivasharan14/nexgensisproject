@@ -27,6 +27,15 @@ export interface ProductsResponse {
   limit: number;
 }
 
+export interface ProductInput {
+  title: string;
+  description: string;
+  category: string;
+  price: number;
+  stock: number;
+}
+
+// Get products
 export const getProducts = async (
   limit: number,
   skip: number
@@ -38,6 +47,7 @@ export const getProducts = async (
   return response.data;
 };
 
+// Search products
 export const searchProducts = async (
   query: string,
   limit: number,
@@ -45,15 +55,16 @@ export const searchProducts = async (
   signal?: AbortSignal
 ): Promise<ProductsResponse> => {
   const response = await axiosInstance.get<ProductsResponse>(
-    `/products/search?q=${encodeURIComponent(query)}&limit=${limit}&skip=${skip}`,
-    {
-      signal,
-    }
+    `/products/search?q=${encodeURIComponent(
+      query
+    )}&limit=${limit}&skip=${skip}`,
+    { signal }
   );
 
   return response.data;
 };
 
+// Get categories
 export const getCategories = async (): Promise<string[]> => {
   const response = await axiosInstance.get<string[]>(
     "/products/category-list"
@@ -62,22 +73,62 @@ export const getCategories = async (): Promise<string[]> => {
   return response.data;
 };
 
+// Get products by category
 export const getProductsByCategory = async (
   category: string,
   limit: number,
   skip: number
 ): Promise<ProductsResponse> => {
   const response = await axiosInstance.get<ProductsResponse>(
-    `/products/category/${encodeURIComponent(category)}?limit=${limit}&skip=${skip}`
+    `/products/category/${encodeURIComponent(
+      category
+    )}?limit=${limit}&skip=${skip}`
   );
 
   return response.data;
 };
 
+// Get single product
 export const getProductById = async (
   id: number
 ): Promise<Product> => {
   const response = await axiosInstance.get<Product>(
+    `/products/${id}`
+  );
+
+  return response.data;
+};
+
+// Add product
+export const addProduct = async (
+  product: ProductInput
+): Promise<Product> => {
+  const response = await axiosInstance.post<Product>(
+    "/products/add",
+    product
+  );
+
+  return response.data;
+};
+
+// Update product
+export const updateProduct = async (
+  id: number,
+  product: ProductInput
+): Promise<Product> => {
+  const response = await axiosInstance.put<Product>(
+    `/products/${id}`,
+    product
+  );
+
+  return response.data;
+};
+
+// Delete product
+export const deleteProduct = async (
+  id: number
+): Promise<Product> => {
+  const response = await axiosInstance.delete<Product>(
     `/products/${id}`
   );
 
