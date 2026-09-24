@@ -1,36 +1,168 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Product Admin Dashboard
 
-## Getting Started
+A responsive Product Admin Dashboard built with Next.js, React, Tailwind CSS and Axios using the DummyJSON API.
 
-First, run the development server:
+## Live Demo
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+https://nexgensis-product-admin.onrender.com
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## GitHub Repository
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+https://github.com/shivasharan14/nexgensisproject
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Tech Stack
 
-## Learn More
+- Next.js 16
+- React
+- TypeScript
+- Tailwind CSS
+- Axios
+- DummyJSON API
 
-To learn more about Next.js, take a look at the following resources:
+## Features
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Authentication
+- Login using DummyJSON authentication API
+- Demo credentials:
+  - Username: `emilys`
+  - Password: `emilyspass`
+- Token stored in localStorage
+- Protected product pages
+- Logout functionality
+- Prevents multiple login requests while login is in progress
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Product Management
+- Product listing with:
+  - Product image
+  - Title
+  - Category
+  - Price
+  - Rating
+  - Stock
+- Responsive desktop table
+- Responsive mobile card layout
+- Product details page
+- Product reviews
+- Add product
+- Edit product
+- Delete product
+- Delete confirmation
 
-## Deploy on Vercel
+### Search, Filter and Sort
+- Product search using DummyJSON search API
+- 500ms debounce for search
+- Previous search request is cancelled using AbortController
+- Category filtering
+- Price sorting
+- Rating sorting
+- Title sorting
+- Search, category and sorting state are stored in the URL
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Pagination
+- Server-side pagination using `limit` and `skip`
+- Page sizes:
+  - 10
+  - 20
+  - 50
+- Previous and Next buttons
+- Page number navigation
+- Showing range such as `Showing 1–20 of 194`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Error and Loading Handling
+- Loading states
+- Empty states
+- API error states
+- Retry option
+- Invalid page values are handled safely
+- Invalid product IDs show a Product Not Found state
+
+## API
+
+This project uses the DummyJSON API:
+
+- Authentication: `/auth/login`
+- Products: `/products`
+- Search: `/products/search`
+- Categories: `/products/category-list`
+- Category products: `/products/category/{category}`
+- Product details: `/products/{id}`
+- Add product: `/products/add`
+- Update product: `/products/{id}`
+- Delete product: `/products/{id}`
+
+## Engineering Decisions
+
+### Search and Category Filtering
+
+The DummyJSON API does not support combining search and category filtering in a single request.
+
+The application therefore treats search and category as separate API operations. When both values are present in the URL, search takes priority and the search endpoint is used.
+
+This avoids making unsupported API requests and keeps the API logic predictable.
+
+### Add, Edit and Delete Persistence
+
+DummyJSON simulates Add, Edit and Delete API operations but does not permanently persist the changes.
+
+To provide a realistic user experience, the application updates the local React state after a successful API response.
+
+Therefore:
+
+- Add immediately appears in the product list.
+- Edit immediately updates the product.
+- Delete immediately removes the product.
+
+After a browser refresh, the original DummyJSON data is loaded again because the API does not persist these changes.
+
+### Fast Search Handling
+
+Search uses a 500ms debounce to avoid sending a request for every keystroke.
+
+AbortController is used to cancel the previous request when a newer search request starts. This prevents an older API response from overwriting the latest search results.
+
+### URL State
+
+Page, page size, search, category and sorting values are stored in the URL.
+
+Example:
+
+`/products?page=1&size=20&search=phone&category=smartphones&sort=price-asc`
+
+This makes the current product view shareable and keeps browser navigation useful.
+
+### Invalid URL Handling
+
+Invalid values such as:
+
+`?page=abc`
+
+are safely converted to page 1.
+
+If a page number is greater than the available number of pages, the application redirects to a valid page instead of breaking.
+
+## Project Structure
+
+```text
+product-admin-dashboard/
+│
+├── api/
+│   ├── axiosInstance.ts
+│   ├── authApi.ts
+│   └── productApi.ts
+│
+├── app/
+│   ├── login/
+│   │   └── page.tsx
+│   │
+│   ├── products/
+│   │   ├── page.tsx
+│   │   └── [id]/
+│   │       └── page.tsx
+│   │
+│   ├── page.tsx
+│   ├── layout.tsx
+│   └── globals.css
+│
+├── public/
+├── package.json
+└── README.md
