@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   getCategories,
@@ -10,7 +10,7 @@ import {
   Product,
 } from "../../api/productApi";
 
-export default function ProductsPage() {
+function ProductsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -61,7 +61,7 @@ export default function ProductsPage() {
     loadCategories();
   }, []);
 
-  // Keep input synced with URL
+  // Keep search input synced with URL
   useEffect(() => {
     setSearchInput(search);
   }, [search]);
@@ -115,6 +115,27 @@ export default function ProductsPage() {
 
         if (controller.signal.aborted) return;
 
+        // Handle invalid page numbers such as ?page=999
+        const maxPage = Math.max(
+          1,
+          Math.ceil(data.total / pageSize)
+        );
+
+        if (page > maxPage) {
+          const params = new URLSearchParams();
+
+          params.set("page", "1");
+          params.set("size", String(pageSize));
+
+          if (search) params.set("search", search);
+          if (category) params.set("category", category);
+          if (sort) params.set("sort", sort);
+
+          router.replace(`/products?${params.toString()}`);
+
+          return;
+        }
+
         setProducts(data.products);
         setTotal(data.total);
       } catch (error: any) {
@@ -135,7 +156,7 @@ export default function ProductsPage() {
     return () => {
       controller.abort();
     };
-  }, [page, pageSize, search, category]);
+  }, [page, pageSize, search, category, router, sort]);
 
   // Sort on client
   const sortedProducts = [...products].sort((a, b) => {
@@ -198,7 +219,9 @@ export default function ProductsPage() {
   };
 
   const changePage = (newPage: number) => {
-    updateUrl({ page: newPage });
+    updateUrl({
+      page: newPage,
+    });
   };
 
   const changePageSize = (newSize: number) => {
@@ -228,7 +251,9 @@ export default function ProductsPage() {
     });
   };
 
-  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const start =
+    total === 0 ? 0 : (page - 1) * pageSize + 1;
+
   const end = Math.min(page * pageSize, total);
 
   if (loading) {
@@ -245,11 +270,13 @@ export default function ProductsPage() {
     return (
       <main className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <p className="mb-4 text-red-600">{error}</p>
+          <p className="mb-4 text-red-600">
+            {error}
+          </p>
 
           <button
             onClick={() => window.location.reload()}
-            className="rounded-lg bg-blue-600 px-5 py-2 text-white"
+            className="rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-700"
           >
             Retry
           </button>
@@ -298,7 +325,9 @@ export default function ProductsPage() {
             <input
               type="text"
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              onChange={(e) =>
+                setSearchInput(e.target.value)
+              }
               placeholder="Search by product name..."
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500"
             />
@@ -317,7 +346,9 @@ export default function ProductsPage() {
               }
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5"
             >
-              <option value="">All Categories</option>
+              <option value="">
+                All Categories
+              </option>
 
               {categories.map((item) => (
                 <option key={item} value={item}>
@@ -341,21 +372,27 @@ export default function ProductsPage() {
               className="w-full rounded-lg border border-gray-300 px-4 py-2.5"
             >
               <option value="">Default</option>
+
               <option value="price-asc">
                 Price: Low to High
               </option>
+
               <option value="price-desc">
                 Price: High to Low
               </option>
+
               <option value="rating-desc">
                 Rating: High to Low
               </option>
+
               <option value="rating-asc">
                 Rating: Low to High
               </option>
+
               <option value="title-asc">
                 Title: A to Z
               </option>
+
               <option value="title-desc">
                 Title: Z to A
               </option>
@@ -363,7 +400,7 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {/* Page information */}
+        {/* Page Information */}
         <div className="mb-5 flex items-center justify-between rounded-xl bg-white p-4 shadow-sm">
           <p className="text-sm text-gray-600">
             Showing{" "}
@@ -376,7 +413,9 @@ export default function ProductsPage() {
           <select
             value={pageSize}
             onChange={(e) =>
-              changePageSize(Number(e.target.value))
+              changePageSize(
+                Number(e.target.value)
+              )
             }
             className="rounded-lg border border-gray-300 px-3 py-2"
           >
@@ -386,7 +425,7 @@ export default function ProductsPage() {
           </select>
         </div>
 
-        {/* Empty */}
+        {/* Empty State */}
         {sortedProducts.length === 0 ? (
           <div className="rounded-xl bg-white p-12 text-center shadow-sm">
             <h2 className="text-xl font-semibold">
@@ -441,11 +480,15 @@ export default function ProductsPage() {
                           />
 
                           <button
-  onClick={() => router.push(`/products/${product.id}`)}
-  className="text-left font-medium hover:text-blue-600"
->
-  {product.title}
-</button>
+                            onClick={() =>
+                              router.push(
+                                `/products/${product.id}`
+                              )
+                            }
+                            className="text-left font-medium hover:text-blue-600"
+                          >
+                            {product.title}
+                          </button>
                         </div>
                       </td>
 
@@ -486,11 +529,15 @@ export default function ProductsPage() {
 
                     <div>
                       <button
-  onClick={() => router.push(`/products/${product.id}`)}
-  className="text-left font-medium hover:text-blue-600"
->
-  {product.title}
-</button>
+                        onClick={() =>
+                          router.push(
+                            `/products/${product.id}`
+                          )
+                        }
+                        className="text-left font-medium hover:text-blue-600"
+                      >
+                        {product.title}
+                      </button>
 
                       <p className="text-sm text-gray-500">
                         {product.category}
@@ -515,9 +562,12 @@ export default function ProductsPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+
             <button
               disabled={page === 1}
-              onClick={() => changePage(page - 1)}
+              onClick={() =>
+                changePage(page - 1)
+              }
               className="rounded-lg border bg-white px-4 py-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Previous
@@ -531,7 +581,9 @@ export default function ProductsPage() {
                 return (
                   <button
                     key={pageNumber}
-                    onClick={() => changePage(pageNumber)}
+                    onClick={() =>
+                      changePage(pageNumber)
+                    }
                     className={`rounded-lg px-4 py-2 ${
                       pageNumber === page
                         ? "bg-blue-600 text-white"
@@ -546,14 +598,33 @@ export default function ProductsPage() {
 
             <button
               disabled={page === totalPages}
-              onClick={() => changePage(page + 1)}
+              onClick={() =>
+                changePage(page + 1)
+              }
               className="rounded-lg border bg-white px-4 py-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Next
             </button>
+
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center">
+          <p className="text-lg text-gray-600">
+            Loading products...
+          </p>
+        </main>
+      }
+    >
+      <ProductsPageContent />
+    </Suspense>
   );
 }
